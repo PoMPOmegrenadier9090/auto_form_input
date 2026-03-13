@@ -11,7 +11,7 @@ AI Auto Form Filler is a browser extension that analyzes selected form areas wit
 
 - **Fuzzy Matching**: If the `select` operation cannot find an exact match for a value, the extension will automatically try a fuzzy match to find the best candidate incorporating a small text embedding model, improving success on multiple forms.
 
-- **Customizable User Profile**: Although this extension is mainly focused on filling job-hunting application form for **Japanese** students, you can freely change user profile definition(I admit the UI should be improved by the way).
+- **Customizable User Profile**: Although this extension is mainly focused on **Japanese** students filling job-hunting application form, you can freely change user profile definition(I admit the UI should be improved by the way).
 
 ## Security & Privacy Defaults
 
