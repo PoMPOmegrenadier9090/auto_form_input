@@ -1,7 +1,8 @@
 import type { Message, LLMAnalysisResult } from '@/types';
-import { loadProfile, loadSettings } from '@/lib/storage';
+import { loadSettings } from '@/lib/storage';
 import { createProvider } from '@/lib/llm/provider';
 import { buildPrompt } from '@/lib/llm/prompt-builder';
+import { debugGroup, debugLog } from '@/lib/debug';
 
 export default defineBackground(() => {
   // Context menu
@@ -15,7 +16,7 @@ export default defineBackground(() => {
 
   browser.contextMenus?.onClicked.addListener((info, tab) => {
     if (info.menuItemId === 'auto-form-fill' && tab?.id) {
-      browser.tabs.sendMessage(tab.id, { type: 'START_AUTOFILL' } satisfies Message);
+      browser.tabs.sendMessage(tab.id, { type: 'START_DETECT' } satisfies Message);
     }
   });
 
@@ -53,6 +54,20 @@ async function handleAnalyzeForm(
     message.fields,
   );
 
+  debugGroup('[AutoFill][LLM] analyze request', () => {
+    debugLog('formElements:', message.formElements.length);
+    debugLog('fields:', message.fields.map((f) => ({ key: f.key, isPublic: f.isPublic, hasValue: !!f.value })));
+    debugLog('systemPrompt:', systemPrompt);
+    debugLog('userPrompt:', userPrompt);
+  });
+
   const provider = createProvider(settings.llmProvider);
-  return provider.analyze(userPrompt, systemPrompt);
+  const result = await provider.analyze(userPrompt, systemPrompt);
+
+  debugGroup('[AutoFill][LLM] analyze response', () => {
+    debugLog('steps:', result.steps ?? []);
+    debugLog('unmapped:', result.unmapped ?? []);
+  });
+
+  return result;
 }

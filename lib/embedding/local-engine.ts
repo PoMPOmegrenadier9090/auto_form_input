@@ -16,7 +16,14 @@ export class LocalEmbeddingEngine implements EmbeddingEngine {
     if (!this.pipeline) {
       // Dynamic import — only loaded when needed
       // これにより，モデルの読み込みによる遅延を軽減する
-      const { pipeline } = await import('@xenova/transformers');
+      const { pipeline, env } = await import('@xenova/transformers');
+
+      // Some sites shadow /models/* and cause 404s. Force remote HF resolution.
+      env.allowLocalModels = false;
+      env.allowRemoteModels = true;
+      env.remoteHost = 'https://huggingface.co';
+      env.remotePathTemplate = '{model}/resolve/{revision}/';
+
       this.pipeline = await pipeline('feature-extraction', this.modelName, {
         quantized: true,
       });

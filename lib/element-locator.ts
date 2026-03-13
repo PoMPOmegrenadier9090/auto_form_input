@@ -2,6 +2,10 @@ import type { ElementLocator, FormElement } from '@/types';
 
 const INPUT_SELECTORS = 'input, select, textarea';
 
+interface BuildLocatorMapOptions {
+  refPrefix?: string;
+}
+
 /**
  * Generate a robust locator for a single element.
  * Priority: id → name+type CSS → unique CSS → XPath.
@@ -67,13 +71,18 @@ export function resolveLocator(locator: ElementLocator): Element | null {
  * Build a locator map for all input elements inside a container.
  * Also assigns data-ref attributes for LLM prompt references.
  */
-export function buildLocatorMap(container: Element): FormElement[] {
+export function buildLocatorMap(
+  container: Element,
+  options: BuildLocatorMapOptions = {},
+): FormElement[] {
   const inputs = container.querySelectorAll(INPUT_SELECTORS);
   const formElements: FormElement[] = [];
+  const { refPrefix } = options;
 
   inputs.forEach((el, index) => {
-    // 各入力要素に一意なdata-ref属性を付与する
-    const ref = String(index + 1);
+    // コンテナのprefixと結合し，各入力要素に一意なdata-ref属性を付与する
+    const localRef = String(index + 1);
+    const ref = refPrefix ? `${refPrefix}-${localRef}` : localRef;
     el.setAttribute('data-ref', ref);
 
     const locator = generateLocator(el);

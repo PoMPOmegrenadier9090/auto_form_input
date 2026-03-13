@@ -127,6 +127,20 @@ export function showToolbar(state: SelectionState, onAction: ToolbarCallback): v
       .success { color: #16a34a; }
       .error { color: #dc2626; }
       .hint { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+      .confidence-row { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+      .prompt-stats { margin-top: 6px; font-size: 11px; color: #475569; }
+      .prompt-warn { margin-top: 4px; font-size: 11px; color: #b45309; }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .chip-low { background: #fef3c7; color: #92400e; }
+      .chip-medium { background: #dbeafe; color: #1d4ed8; }
+      .chip-high { background: #dcfce7; color: #166534; }
     `;
     shadow.appendChild(style);
 
@@ -183,6 +197,20 @@ function renderToolbarContent(state: SelectionState): string {
   // Status-specific views
   if (phase === 'done' && state.filledCount !== undefined) {
     html += `<div class="hint">${state.filledCount}/${state.totalCount} フィールド入力済み</div>`;
+    if (state.confidenceBuckets) {
+      html += `<div class="confidence-row">
+        <span class="chip chip-low">低 ${state.confidenceBuckets.low}</span>
+        <span class="chip chip-medium">中 ${state.confidenceBuckets.medium}</span>
+        <span class="chip chip-high">高 ${state.confidenceBuckets.high}</span>
+      </div>`;
+    }
+  }
+
+  if ((phase === 'selecting' || phase === 'adding' || phase === 'analyzing') && state.estimatedTokenCount !== undefined) {
+    html += `<div class="prompt-stats">推定サイズ: ${state.htmlWordCount ?? 0} words / ${state.htmlCharCount ?? 0} chars / ~${state.estimatedTokenCount} tokens</div>`;
+    if (state.tokenWarning) {
+      html += '<div class="prompt-warn">コンテキスト上限に近い可能性があります。コンテナを絞ってください。</div>';
+    }
   }
 
   // Action buttons

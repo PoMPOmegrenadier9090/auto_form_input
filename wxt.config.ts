@@ -16,6 +16,11 @@ export default defineConfig({
     name: 'AI Auto Form Filler',
     description: 'Secure AI-powered auto form filler',
     permissions: ['storage', 'activeTab', 'scripting', 'offscreen'],
-    host_permissions: ['https://api.openai.com/*'],
+    host_permissions: [
+      'https://api.openai.com/*',
+      'https://generativelanguage.googleapis.com/*',
+      'https://huggingface.co/*',
+      'https://cdn-lfs.huggingface.co/*',
+    ],
   },
 });

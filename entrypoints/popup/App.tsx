@@ -8,6 +8,8 @@ function App() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [message, setMessage] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [confidenceText, setConfidenceText] = useState('');
+  const [promptSizeText, setPromptSizeText] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -19,6 +21,13 @@ function App() {
     const listener = (msg: Message) => {
       if (msg.type === 'SELECTION_STATE') {
         const s = msg.state;
+        if (s.estimatedTokenCount !== undefined) {
+          const warn = s.tokenWarning ? ' ⚠' : '';
+          setPromptSizeText(`推定: ${s.htmlWordCount ?? 0} words / ${s.htmlCharCount ?? 0} chars / ~${s.estimatedTokenCount} tokens${warn}`);
+        } else {
+          setPromptSizeText('');
+        }
+
         if (s.phase === 'error') {
           setPhase('error');
           setMessage(s.message);
@@ -27,9 +36,15 @@ function App() {
           setMessage(s.filledCount !== undefined
             ? `完了: ${s.filledCount}/${s.totalCount} フィールド入力済み`
             : s.message);
+          if (s.confidenceBuckets) {
+            setConfidenceText(`信頼度 低:${s.confidenceBuckets.low} / 中:${s.confidenceBuckets.medium} / 高:${s.confidenceBuckets.high}`);
+          } else {
+            setConfidenceText('');
+          }
         } else {
           setPhase('active');
           setMessage(s.message);
+          setConfidenceText('');
         }
       }
     };
@@ -53,8 +68,10 @@ function App() {
     }
   };
 
-  const openOptions = () => {
-    browser.runtime.openOptionsPage();
+  const openOptions = async () => {
+    await browser.tabs.create({
+      url: browser.runtime.getURL('/options.html'),
+    });
     window.close();
   };
 
@@ -85,6 +102,18 @@ function App() {
       {message && (
         <p className={`mt-2 text-xs ${phase === 'error' ? 'text-red-600' : 'text-green-600'}`}>
           {message}
+        </p>
+      )}
+
+      {confidenceText && (
+        <p className="mt-1 text-xs text-blue-700">
+          {confidenceText}
+        </p>
+      )}
+
+      {promptSizeText && (
+        <p className="mt-1 text-xs text-slate-600">
+          {promptSizeText}
         </p>
       )}
 

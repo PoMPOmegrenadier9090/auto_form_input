@@ -11,6 +11,19 @@ import {
 
 type Tab = 'profile' | 'settings';
 
+const PROVIDER_DEFAULTS = {
+  openai: {
+    model: 'gpt-4o-mini',
+    baseUrl: 'https://api.openai.com/v1',
+    apiPlaceholder: 'sk-...',
+  },
+  gemini: {
+    model: 'gemini-2.0-flash',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    apiPlaceholder: 'AIza...',
+  },
+} as const;
+
 function App() {
   const [tab, setTab] = useState<Tab>('profile');
   const [profile, setProfile] = useState<UserProfile>(createDefaultProfile());
@@ -150,6 +163,15 @@ function App() {
                       placeholder="値"
                       className="flex-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
                     />
+                    {/* ダミー値（LLM参照用） */}
+                    <input
+                      type="text"
+                      value={field.dummyValue ?? ''}
+                      onChange={e => updateField(field._index, { dummyValue: e.target.value })}
+                      placeholder="ダミー値（LLM参照用）"
+                      className="w-44 px-2 py-1 text-xs border rounded focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                      title="形式理解のためにLLMへ渡すサンプル値"
+                    />
                     {/* 公開/非公開切り替え */}
                     <button
                       onClick={() => updateField(field._index, { isPublic: !field.isPublic })}
@@ -210,6 +232,31 @@ function App() {
             <h2 className="text-sm font-semibold text-gray-600 mb-3">LLMプロバイダー</h2>
             <div className="space-y-3">
               <div>
+                <label className="block text-xs text-gray-500 mb-1">プロバイダー</label>
+                <select
+                  value={settings.llmProvider.name || 'openai'}
+                  onChange={e => {
+                    const name = (e.target.value as 'openai' | 'gemini');
+                    const defaults = PROVIDER_DEFAULTS[name];
+                    setSettings(s => ({
+                      ...s,
+                      llmProvider: {
+                        ...s.llmProvider,
+                        name,
+                        model: defaults.model,
+                        baseUrl: defaults.baseUrl,
+                        temperature: s.llmProvider.temperature ?? 0,
+                      },
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs text-gray-500 mb-1">APIキー</label>
                 <input
                   type="password"
@@ -220,7 +267,11 @@ function App() {
                       llmProvider: { ...s.llmProvider, apiKey: e.target.value },
                     }))
                   }
-                  placeholder="sk-..."
+                  placeholder={
+                    (settings.llmProvider.name === 'gemini'
+                      ? PROVIDER_DEFAULTS.gemini.apiPlaceholder
+                      : PROVIDER_DEFAULTS.openai.apiPlaceholder)
+                  }
                   className="w-full px-3 py-2 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
@@ -253,6 +304,27 @@ function App() {
                     className="w-full px-3 py-2 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Temperature (0.0 - 2.0)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={settings.llmProvider.temperature ?? 0}
+                  onChange={e => {
+                    const parsed = Number(e.target.value);
+                    const clamped = Number.isFinite(parsed)
+                      ? Math.min(2, Math.max(0, parsed))
+                      : 0;
+                    setSettings(s => ({
+                      ...s,
+                      llmProvider: { ...s.llmProvider, temperature: clamped },
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
               </div>
             </div>
           </section>

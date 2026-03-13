@@ -6,6 +6,8 @@ export interface ProfileField {
   key: string;
   label: string;
   value: string;
+  /** Optional dummy/sample value used only for LLM format understanding */
+  dummyValue?: string;
   category: string;
   /** If true, the value is sent to LLM along with the key name */
   isPublic: boolean;
@@ -40,22 +42,74 @@ export interface FormElement {
 // LLM
 // ============================================================
 
-export interface LLMMapping {
+export type ValueSource = 'privatePlaceholder' | 'publicValue' | 'literal';
+
+export type InputOperationType = 'direct' | 'concat' | 'template' | 'select_match' | 'split';
+
+interface BaseInputPlanStep {
   ref: string;
+  operation: InputOperationType;
+  confidence?: number;
+  missingKeys?: string[];
+}
+
+export interface DirectInputPlanStep extends BaseInputPlanStep {
+  operation: 'direct';
   key: string;
-  confidence: number;
+  valueSource?: ValueSource;
+  literalValue?: string;
+}
+
+export interface ConcatInputPlanStep extends BaseInputPlanStep {
+  operation: 'concat';
+  keys: string[];
+  separator?: string;
+}
+
+export interface TemplateInputPlanStep extends BaseInputPlanStep {
+  operation: 'template';
+  template: string;
+}
+
+export interface SelectMatchInputPlanStep extends BaseInputPlanStep {
+  operation: 'select_match';
+  key: string;
+  valueSource?: ValueSource;
+  literalValue?: string;
+}
+
+export interface SplitInputPlanStep extends BaseInputPlanStep {
+  operation: 'split';
+  key: string;
+  separator: string;
+  index: number;
+  trim?: boolean;
+}
+
+export type InputPlanStep =
+  | DirectInputPlanStep
+  | ConcatInputPlanStep
+  | TemplateInputPlanStep
+  | SelectMatchInputPlanStep
+  | SplitInputPlanStep;
+
+export interface ConfidenceBuckets {
+  low: number;
+  medium: number;
+  high: number;
 }
 
 export interface LLMAnalysisResult {
-  mappings: LLMMapping[];
+  steps: InputPlanStep[];
   unmapped: string[];
 }
 
 export interface LLMProviderConfig {
-  name: string;
+  name: 'openai' | 'gemini' | string;
   apiKey: string;
   model: string;
   baseUrl: string;
+  temperature?: number;
 }
 
 // ============================================================
@@ -75,8 +129,6 @@ export interface EmbeddingMatch {
 export type Message =
   | { type: 'ANALYZE_FORM'; html: string; fields: ProfileField[]; formElements: FormElement[] }
   | { type: 'MAPPING_RESULT'; result: LLMAnalysisResult }
-  | { type: 'FILL_FORM'; mappings: LLMMapping[]; formElements: FormElement[] }
-  | { type: 'START_AUTOFILL' }
   | { type: 'START_DETECT' }
   | { type: 'DETECT_RESULT'; containers: ContainerInfo[] }
   | { type: 'ADD_CONTAINER' }
@@ -86,9 +138,7 @@ export type Message =
   | { type: 'CANCEL_SELECTION' }
   | { type: 'SELECTION_STATE'; state: SelectionState }
   | { type: 'SELECT_CONTAINER' }
-  | { type: 'GET_SETTINGS' }
-  | { type: 'MATCH_OPTIONS'; profileValue: string; options: { value: string; text: string }[] }
-  | { type: 'MATCH_OPTIONS_RESULT'; match: EmbeddingMatch | null };
+  | { type: 'GET_SETTINGS' };
 
 export interface ContainerInfo {
   index: number;
@@ -106,6 +156,11 @@ export interface SelectionState {
   message: string;
   filledCount?: number;
   totalCount?: number;
+  confidenceBuckets?: ConfidenceBuckets;
+  htmlCharCount?: number;
+  htmlWordCount?: number;
+  estimatedTokenCount?: number;
+  tokenWarning?: boolean;
 }
 
 // ============================================================

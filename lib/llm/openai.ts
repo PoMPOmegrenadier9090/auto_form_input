@@ -27,7 +27,7 @@ export class OpenAIProvider implements LLMProvider {
           { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0,
+        temperature: this.config.temperature ?? 0,
       }),
     });
 

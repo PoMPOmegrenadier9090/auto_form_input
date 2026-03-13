@@ -17,9 +17,9 @@ const REMOVE_TAGS = new Set([
 const KEEP_ATTRIBUTES = new Set([
   'type', 'name', 'id', 'placeholder',
   'aria-label', 'aria-describedby', 'aria-labelledby',
-  'required', 'value', 'for',
+  'required', 'for',
   'data-ref', // our injected ref
-  'multiple', 'checked', 'selected',
+  'multiple',
   'min', 'max', 'pattern',
 ]);
 
@@ -74,6 +74,11 @@ function sanitizeNode(node: Node): void {
 
     // Strip non-semantic attributes
     stripAttributes(el);
+
+    // Never send prefilled textarea content to LLM.
+    if (tag === 'textarea') {
+      el.textContent = '';
+    }
 
     // Recurse
     sanitizeNode(el);

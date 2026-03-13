@@ -6,6 +6,7 @@ import { fillForm } from '@/lib/form-filler';
 import { loadProfile } from '@/lib/storage';
 import { LocalEmbeddingEngine } from '@/lib/embedding/local-engine';
 import { FORM_INPUT_SELECTOR } from '@/lib/selectors';
+import { debugGroup, debugLog, debugTable } from '@/lib/debug';
 import {
   highlightContainer,
   highlightInputs,
@@ -36,6 +37,52 @@ function buildState(phase: SelectionState['phase'], message: string, extra?: Par
   return { phase, containers: getContainerInfos(), message, ...extra };
 }
 
+function buildConfidenceBuckets(confidences: number[]) {
+  const buckets = { low: 0, medium: 0, high: 0 };
+  for (const c of confidences) {
+    if (c < 0.4) buckets.low += 1;
+    else if (c < 0.75) buckets.medium += 1;
+    else buckets.high += 1;
+  }
+  return buckets;
+}
+
+/**
+ * プロンプトのトークン数を推定するために、選択されたコンテナのHTMLをサニタイズして結合し、その文字数と単語数からトークン数を概算する。
+ * @param containers 選択されたコンテナの配列
+ * @returns トークン数の推定値と関連情報
+ */
+function estimatePromptStatsFromContainers(containers: Element[]): {
+  htmlCharCount: number;
+  htmlWordCount: number;
+  estimatedTokenCount: number;
+  tokenWarning: boolean;
+} {
+  if (containers.length === 0) {
+    return {
+      htmlCharCount: 0,
+      htmlWordCount: 0,
+      estimatedTokenCount: 0,
+      tokenWarning: false,
+    };
+  }
+
+  const html = containers.map((c) => extractSanitizedHtml(c)).join('\n<!-- next container -->\n');
+  const htmlCharCount = html.length;
+  const plainText = html.replace(/<[^>]+>/g, ' ');
+  const htmlWordCount = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
+  // Rough approximation: 1 token ~= 4 chars (English-heavy). Japanese can vary.
+  const estimatedTokenCount = Math.ceil(htmlCharCount / 4);
+  const tokenWarning = estimatedTokenCount > 12000;
+
+  return {
+    htmlCharCount,
+    htmlWordCount,
+    estimatedTokenCount,
+    tokenWarning,
+  };
+}
+
 /**
  * コンテナ選択のUIを更新する。選択中のコンテナ情報も含めて状態を構築し、ツールバーとPopupに通知する。
  * @param phase 
@@ -43,7 +90,11 @@ function buildState(phase: SelectionState['phase'], message: string, extra?: Par
  * @param extra 
  */
 function updateUI(phase: SelectionState['phase'], message: string, extra?: Partial<SelectionState>): void {
-  const state = buildState(phase, message, extra);
+  const stats = estimatePromptStatsFromContainers(activeContainers);
+  const state = buildState(phase, message, {
+    ...stats,
+    ...extra,
+  });
   // ツールバーを更新する
   showToolbar(state, handleToolbarAction);
   // Popup にも状態を通知
@@ -145,11 +196,16 @@ async function handleConfirmAndFill(): Promise<void> {
   const allHtmlParts: string[] = [];
 
   // 各コンテナからサニタイズされたHTMLとフォーム要素を抽出し、全体のリストに追加する
-  for (const container of activeContainers) {
-    const elements = buildLocatorMap(container);
+  activeContainers.forEach((container, index) => {
+    const refPrefix = `c${index + 1}`;
+    const elements = buildLocatorMap(container, { refPrefix });
     allFormElements.push(...elements);
     allHtmlParts.push(extractSanitizedHtml(container));
-  }
+  });
+
+  debugGroup('[AutoFill] Ref assignment check', () => {
+    debugTable(allFormElements.map((fe) => ({ ref: fe.ref, tag: fe.tagName, type: fe.type ?? '' })));
+  });
 
   if (allFormElements.length === 0) {
     updateUI('error', '入力要素が見つかりませんでした。');
@@ -168,6 +224,12 @@ async function handleConfirmAndFill(): Promise<void> {
 
   // LLM analysis
   updateUI('analyzing', 'AIがフォームを解析中...');
+  debugGroup('[AutoFill] LLM request payload', () => {
+    debugLog('combinedHtml length:', combinedHtml.length);
+    debugLog('formElements:', allFormElements);
+    debugLog('profile fields:', profile.fields.map((f) => ({ key: f.key, isPublic: f.isPublic, hasValue: !!f.value })));
+  });
+
   const response = await browser.runtime.sendMessage({
     type: 'ANALYZE_FORM',
     html: combinedHtml,
@@ -182,19 +244,31 @@ async function handleConfirmAndFill(): Promise<void> {
 
   const { result } = response as Extract<Message, { type: 'MAPPING_RESULT' }>;
 
+  debugGroup('[AutoFill] LLM mapped result', () => {
+    debugLog(result);
+  });
+
   // Fill form
   updateUI('filling', 'フォームに入力中...');
+  const confidences = (result.steps ?? []).map((s) => s.confidence ?? 1);
   const fillResult = await fillForm(
-    result.mappings,
+    result,
     allFormElements,
     profile.fields,
     embeddingEngine,
   );
 
+  debugGroup('[AutoFill] Fill execution summary', () => {
+    debugLog('filled:', fillResult.filled);
+    debugLog('failed refs:', fillResult.failed);
+    debugLog('confidence buckets:', buildConfidenceBuckets(confidences));
+  });
+
   removeAllHighlights();
   updateUI('done', '自動入力が完了しました', {
     filledCount: fillResult.filled,
     totalCount: allFormElements.length,
+    confidenceBuckets: buildConfidenceBuckets(confidences),
   });
   activeContainers = [];
 }
@@ -210,12 +284,6 @@ export default defineContentScript({
       (message: Message, _sender, sendResponse) => {
         switch (message.type) {
           case 'START_DETECT':
-            handleStartDetect();
-            sendResponse({ ok: true });
-            return false;
-
-          case 'START_AUTOFILL':
-            // Legacy: auto-detect + immediately fill
             handleStartDetect();
             sendResponse({ ok: true });
             return false;
